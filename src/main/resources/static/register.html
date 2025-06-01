@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Smart Task Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="display: flex; margin-top: 80px; align-items: center;  flex-direction: column;">
+  <h2>Register</h2>
+  <input type="text" id="registerUsername" placeholder="Username" style="margin: 5px; width: 250px;">
+  <input type="password" id="registerPassword" placeholder="Password" style="margin: 5px; width: 250px;">
+  <button onclick="register()" style="margin: 10px;">Register</button>
+  <p id="registerError" style="color:red; margin-top:10px;"></p>
+
+  <p>Already have an account? <a href="login.html">Back to Login</a></p>
+
+  <script>
+    function register() {
+      const username = document.getElementById('registerUsername').value.trim();
+      const password = document.getElementById('registerPassword').value.trim();
+
+      if (!username || !password) {
+        document.getElementById('registerError').textContent = "Username and password required.";
+        return;
+      }
+
+      fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      }).then(res => {
+        if (res.ok) {
+            alert("Registration successful! Redirecting to login.");
+            window.location.href = "login.html";
+        } else {
+            alert("Registration failed: Username already exists.");
+        }
+      });
+    }
+  </script>
+</body>
+</html>

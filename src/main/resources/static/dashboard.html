@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smart Task Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <h2>Smart Task Manager</h2>
+
+  <div id="customAlert"></div>
+
+  <div id="customConfirm">
+    <p id="confirmMessage"></p>
+    <button id="confirmYes">Ok</button>
+    <button id="confirmNo">Cancel</button>
+  </div>
+
+  <nav>
+    <button onclick="showTab('dashboardStats')">Dashboard</button>
+    <button onclick="showTab('myTasks')">My Tasks</button>
+    <button onclick="showTab('createTask')">Create Task</button>
+    <button onclick="showTab('profile')">Profile</button>
+    <button id="adminTabBtn" onclick="showTab('admin')">Admin</button>
+    <button onclick="logout()">Logout</button>
+  </nav>
+
+  <!-- Dashboard Stats -->
+  <div id="dashboardStats" class="tab active">
+    <h3>Dashboard Summary</h3>
+    <p>Completed: <span id="completedCount">0</span></p>
+    <p>Pending: <span id="pendingCount">0</span></p>
+    <p>In Progress: <span id="inProgressCount">0</span></p>
+    <h4>Upcoming Tasks (&lt;3 days)</h4>
+    <ul id="upcomingTasks"></ul>
+    <h4>Overdue Tasks</h4>
+    <ul id="overdueTasks"></ul>
+  </div>
+
+  <!-- My Tasks -->
+  <div id="myTasks" class="tab">
+    <h3>My Tasks</h3>
+    <div id="taskList"></div>
+  </div>
+
+  <!-- Create Task -->
+  <div id="createTask" class="tab">
+    <h3>Create New Task</h3>
+    <input id="title" placeholder="Title (required)"><br><br>
+    <textarea id="description" placeholder="Description"></textarea><br><br>
+    <input id="dueDate" type="date"><br><br>
+    <button onclick="submitTask()">Submit Task</button>
+  </div>
+
+  <!-- Profile -->
+  <div id="profile" class="tab">
+    <h3>Profile</h3>
+    <p>Username: <span id="usernameDisplay"></span></p>
+    <input type="password" id="newPassword" placeholder="New password">
+    <button onclick="updatePassword()">Change Password</button>
+    <button onclick="deleteAccount()" class="danger">Delete Account</button>
+  </div>
+
+  <!-- Admin -->
+  <div id="admin" class="tab">
+    <h3>Admin Panel</h3>
+    <button onclick="loadAllUsers()">Load Users</button>
+    <ul id="adminUserList"></ul>
+  </div>
+
+  <script>
+    
+    // User intended tab is only shown
+    function showTab(tabId) {
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        if (tabId === 'myTasks') {
+            loadTasks(); 
+        } 
+        if (tabId === 'dashboardStats') {
+            loadDashboardStats();
+        }
+        if (tabId === "profile") {
+            displayUsername();
+        }
+    }
+
+    async function loadDashboardStats() {
+        const user = JSON.parse(localStorage.getItem("user"));
+
+        const statuses = ["completed", "pending", "in-progress"];
+
+        // Dashboard summary
+        for (const status of statuses) {
+            const res = await fetch(`/api/tasks/count/${user.id}/${status}`, {
+            credentials: "include"
+            });
+
+            const count = await res.text();
+            if (status === "completed") document.getElementById("completedCount").innerText = count;
+            if (status === "pending") document.getElementById("pendingCount").innerText = count;
+            if (status === "in-progress") document.getElementById("inProgressCount").innerText = count;
+        }
+
+        // Upcoming tasks (< 3 days)
+        const upcomingRes = await fetch(`/api/tasks/upcoming/${user.id}`, {
+            credentials: "include"
+        });
+        const upcomingTasks = await upcomingRes.json();
+        const upcomingList = document.getElementById("upcomingTasks");
+        upcomingList.innerHTML = "";
+        upcomingTasks.forEach(task => {
+            const li = document.createElement("li");
+            li.textContent = `${task.title} (Due: ${new Date(task.dueDate + 'T00:00').toLocaleDateString()})`;
+            upcomingList.appendChild(li);
+        });
+
+        // Overdue tasks
+        const overdueRes = await fetch(`/api/tasks/overdue/${user.id}`, {
+            credentials: "include"
+        });
+        const overdueTasks = await overdueRes.json();
+        const overdueList = document.getElementById("overdueTasks");
+        overdueList.innerHTML = "";
+        overdueTasks.forEach(task => {
+            const li = document.createElement("li");
+            li.textContent = `${task.title} (Due: ${new Date(task.dueDate + 'T00:00').toLocaleDateString()})`;
+            overdueList.appendChild(li);
+        });
+    }
+    
+    // Loads tasks with edit function
+    async function loadTasks() {
+        const user = JSON.parse(localStorage.getItem('user'));
+    
+        const res = await fetch(`/api/tasks/user/${user.id}`, {
+            credentials: 'include'
+        });
+
+        const tasks = await res.json();
+
+        const list = document.getElementById('taskList');
+        list.innerHTML = ''; 
+
+        tasks.forEach(task => {
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            card.setAttribute("data-task-id", task.id);
+            card.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                <h4>${task.title}</h4>
+                <p>${task.description}</p>
+                <p><strong>Created:</strong> ${new Date(task.creationDate + 'T00:00').toLocaleDateString()}</p>
+                <p><strong>Due:</strong> ${new Date(task.dueDate + 'T00:00').toLocaleDateString()}</p>
+                <p><strong>Status:</strong> ${task.status}</p>
+                </div>
+                <div>
+                <select onchange="handleEditOption(this.value, ${task.id})">
+                    <option value="">Edit...</option>
+                    <option value="status">Update Status</option>
+                    <option value="delete">Delete</option>
+                    <option value="date">Change Date</option>
+                </select>
+                </div>
+            </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    // Main method for editing tasks
+    function handleEditOption(option, taskId) {
+        const existingStatusGroup = document.getElementById(`status-buttons-${taskId}`);
+        if (existingStatusGroup) existingStatusGroup.remove();
+
+        const existingDateGroup = document.getElementById(`date-input-${taskId}`);
+        if (existingDateGroup) existingDateGroup.remove();
+
+        if (option === 'status') {
+            const buttonGroup = document.createElement('div');
+            buttonGroup.id = `status-buttons-${taskId}`; 
+
+            ['pending', 'in-progress', 'completed'].forEach(status => {
+                const btn = document.createElement('button');
+                btn.textContent = status;
+                btn.style.marginRight = "15px";
+                btn.onclick = () => updateStatus(taskId, status);
+                buttonGroup.appendChild(btn);
+            });
+
+            const card = document.querySelector(`select[onchange*="${taskId}"]`).closest('.task-card');
+            card.appendChild(buttonGroup);
+        }
+
+        else if (option === 'delete') {
+            showCustomConfirm("Are you sure you want to delete this task?", () => {
+                deleteTask(taskId);
+            });
+        }
+
+        else if (option === 'date') {
+            const dateGroup = document.createElement("div");
+            dateGroup.id = `date-input-${taskId}`;
+            dateGroup.style.marginTop = "10px";
+            dateGroup.style.display = "flex";
+            dateGroup.style.alignItems = "center";
+            dateGroup.style.gap = "8px";
+
+            const input = document.createElement("input");
+            input.type = "date";
+            input.style.maxWidth = "160px";
+            
+            const submitBtn = document.createElement("button");
+            submitBtn.textContent = "Update Due Date";
+            submitBtn.style.marginTop = "-8px";
+            submitBtn.style.marginLeft = "8px";
+
+            submitBtn.onclick = () => {
+                if (input.value) {
+                    updateDueDate(taskId, input.value);
+                    dateGroup.remove();
+                } else {
+                    showCustomAlert("Please select a valid date", "#ffc107");
+                }
+            };
+
+            dateGroup.appendChild(input);
+            dateGroup.appendChild(submitBtn);
+
+            const card = document.querySelector(`select[onchange*="${taskId}"]`).closest('.task-card');
+            card.appendChild(dateGroup);
+        }
+    }
+
+    // Sub-methods below for editing tasks
+    function updateStatus(id, status) {
+        fetch(`/api/tasks/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ status })
+        }).then(res => {
+            if (res.ok) {
+            showCustomAlert("Status updated", "#28a745");
+            loadTasks();
+            } else {
+            showCustomAlert("Failed to update status", "#dc3545");
+            }
+        });
+    }
+
+    function deleteTask(id) {
+        fetch(`/api/tasks/${id}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        }).then(res => {
+            if (res.ok) {
+            showCustomAlert("Task deleted", "#28a745");
+            loadTasks();
+            } else {
+            showCustomAlert("Delete failed", "#dc3545");
+            }
+        });
+    }
+
+    function updateDueDate(id, dueDate) {
+        fetch(`/api/tasks/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ dueDate })
+        }).then(res => {
+            if (res.ok) {
+            showCustomAlert("Due date updated", "#28a745");
+            loadTasks();
+            } else {
+            showCustomAlert("Failed to update due date", "#dc3545");
+            }
+        });
+    }
+
+    // Create new task
+    function submitTask() {
+        const title = document.getElementById('title').value.trim();
+        const description = document.getElementById('description').value;
+        const dueDate = document.getElementById('dueDate').value;
+
+        if (!title) {
+            showCustomAlert("Title is required", "#dc3545");
+            return;
+        }
+
+        const user = JSON.parse(localStorage.getItem('user'));
+      
+        console.log("Submit button clicked");
+        fetch('/api/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ 
+            title, 
+            description, 
+            dueDate, 
+            status: 'pending'
+            })
+        }).then(res => {
+            if (res.ok) {
+                showCustomAlert("Task created", "#28a745");
+                document.getElementById('title').value = '';
+                document.getElementById('description').value = '';
+                document.getElementById('dueDate').value = '';
+            } else{
+                showCustomAlert("Failed to create task", "#dc3545");
+            }
+        });
+    }
+
+    // Profile-related methods below
+    function displayUsername() {
+        const user = JSON.parse(localStorage.getItem("user"));
+        if (user && user.username) {
+            document.getElementById("usernameDisplay").textContent = user.username;
+        }
+    }
+
+    function updatePassword() {
+        const newPassword = document.getElementById("newPassword").value.trim();
+        const user = JSON.parse(localStorage.getItem("user"));
+
+        if (!newPassword) {
+            showCustomAlert("Password cannot be empty", "#dc3545");
+            return;
+        }
+
+        fetch(`/api/users/${user.id}/password`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ newPassword })
+        }).then(res => {
+            if (res.ok) {
+            showCustomAlert("Password updated", "#28a745");
+            document.getElementById("newPassword").value = "";
+            } else {
+            showCustomAlert("Failed to update password", "#dc3545");
+            }
+        });
+    }
+
+    function deleteAccount() {
+        const user = JSON.parse(localStorage.getItem("user"));
+
+        showCustomConfirm("Are you sure you want to delete your account? This action cannot be undone.", () => {
+            fetch(`/api/users/me/${user.id}`, {
+                method: "DELETE",
+                credentials: "include"
+            }).then(res => {
+                if (res.ok) {
+                    showCustomAlert("Account deleted successfully", "#28a745");
+                    localStorage.removeItem("user");
+                    window.location.href = "/login.html";
+                } else {
+                    showCustomAlert("Failed to delete account", "#dc3545");
+                }
+            });
+        });
+    }
+
+    // Logs user out and redirects to log-in page
+    function logout() {
+        localStorage.removeItem('user');
+        showCustomAlert("Logging out...", "#28a745");
+        setTimeout(() => {
+            window.location.href = "/login.html";
+        }, 400);
+    }
+
+    // Methods below for alerts/prompts
+    function showCustomAlert(message, color = "#28a745") {
+        const box = document.getElementById("customAlert");
+        box.textContent = message;
+        box.style.backgroundColor = color;
+        box.style.display = "block";
+
+        setTimeout(() => {
+            box.style.display = "none";
+        }, 1400);
+    }
+
+    function showCustomConfirm(message, onConfirm) {
+        const box = document.getElementById("customConfirm");
+        const msg = document.getElementById("confirmMessage");
+        const yesBtn = document.getElementById("confirmYes");
+        const noBtn = document.getElementById("confirmNo");
+
+        msg.textContent = message;
+        box.style.display = "block";
+
+        yesBtn.onclick = () => {
+            box.style.display = "none";
+            onConfirm();
+        };
+
+        noBtn.onclick = () => {
+            box.style.display = "none";
+        };
+    }
+
+    // Methods Below For Admin Users Only 
+    function loadAllUsers() {
+        fetch("/api/users", {
+            credentials: "include"
+        })
+        .then(res => res.json())
+        .then(users => {
+            const list = document.getElementById("adminUserList");
+            list.innerHTML = "";
+            users.forEach(user => {
+                const li = document.createElement("li");
+                let userInfo = `ID: ${user.id} | Username: ${user.username} | Role: ${user.role}`;
+                if (user.role !== "admin") {
+                    userInfo += ` <button onclick="adminDeleteUser(${user.id})" style="margin-left:10px;color:red">Delete</button>`;
+                }
+                li.innerHTML = userInfo;
+                list.appendChild(li);
+            });
+        });
+    }
+
+    function adminDeleteUser(id) {
+        showCustomConfirm("Are you sure you want to delete this user?", () => {
+            fetch(`/api/users/${id}`, {
+                method: "DELETE",
+                credentials: "include"
+            })
+            .then(res => {
+                if (res.ok) {
+                    showCustomAlert("User deleted", "#28a745");
+                    loadAllUsers(); 
+                } else {
+                    showCustomAlert("Failed to delete user", "#dc3545");
+                }
+            });
+        });
+        
+    }
+
+    // What do display after log-in
+    window.onload = function() {
+        showTab('dashboardStats');
+
+        const user = JSON.parse(localStorage.getItem("user"));
+        if (!user || user.role !== "admin") {
+            document.getElementById("adminTabBtn").style.display = "none";
+        }
+    };
+
+  </script>
+
+</body>
+</html>
