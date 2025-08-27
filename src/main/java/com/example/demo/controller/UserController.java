@@ -1,12 +1,10 @@
 package com.example.demo.controller;
-
 import com.example.demo.model.User;
 import com.example.demo.service.UserService;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @RestController
@@ -16,17 +14,23 @@ public class UserController {
     @Autowired
     private UserService userService;
 
-    //Helper function for updatePassword
-    public static class PasswordUpdateDTO {
-        private String newPassword;
-
-        public String getNewPassword() {
-            return newPassword;
+    // Login function
+    @PostMapping("/login")
+    public ResponseEntity<User> login(@RequestBody User loginRequest, HttpSession session) {
+        User user = userService.login(loginRequest);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        session.setAttribute("user", user);
+        return ResponseEntity.ok(user);
+    }
 
-        public void setNewPassword(String newPassword) {
-            this.newPassword = newPassword;
-        }
+    @GetMapping("/me")
+    public ResponseEntity<User> me(HttpSession session) {
+        User user = (User) session.getAttribute("user");
+        return (user != null)
+                ? ResponseEntity.ok(user)
+                : ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
     // Register new user
@@ -41,9 +45,11 @@ public class UserController {
 
     // User can change password
     @PutMapping("/{id}/password")
-    public boolean updatePassword(@PathVariable Long id, @RequestBody PasswordUpdateDTO dto) {
-        return userService.updatePassword(id, dto.getNewPassword());
+    public ResponseEntity<Boolean> updatePassword(@PathVariable Long id, @RequestBody User user) {
+        boolean updated = userService.updatePassword(id, user.getPassword());
+        return ResponseEntity.ok(updated);
     }
+
 
     // Delete own account
     @DeleteMapping("/me/{id}")

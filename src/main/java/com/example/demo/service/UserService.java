@@ -18,6 +18,7 @@ public class UserService {
     @Autowired
     private TaskRepository taskRepository;
 
+    // Create new user
     public User register(User user){
         if(user.getUsername() == null || user.getPassword() == null){
             return null;
@@ -31,6 +32,7 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    // Login user
     public User login(User user){
         if (user.getUsername() != null && user.getPassword() != null) {
             Optional<User> existingUserOpt = userRepository.findByUsername(user.getUsername());
@@ -45,6 +47,7 @@ public class UserService {
         return null; // Login failed
     }
 
+    // Change password
     public boolean updatePassword(Long id, String newPassword) {
         User user = userRepository.findById(id).orElse(null);
         if (user == null) return false;
@@ -54,7 +57,7 @@ public class UserService {
         return true;
     }
 
-    //Admin
+    // Admin methods
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }

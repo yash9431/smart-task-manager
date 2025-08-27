@@ -325,10 +325,10 @@
     }
 
     function updatePassword() {
-        const newPassword = document.getElementById("newPassword").value.trim();
+        const password = document.getElementById("newPassword").value.trim();
         const user = JSON.parse(localStorage.getItem("user"));
 
-        if (!newPassword) {
+        if (!password) {
             showCustomAlert("Password cannot be empty", "#dc3545");
             return;
         }
@@ -337,7 +337,7 @@
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ newPassword })
+            body: JSON.stringify({ password })
         }).then(res => {
             if (res.ok) {
             showCustomAlert("Password updated", "#28a745");
